@@ -680,7 +680,7 @@ export default function App() {
                 const rising  = prices.filter(p=>p.trend==="up").length;
                 const falling = prices.filter(p=>p.trend==="down").length;
                 const stable  = prices.filter(p=>p.trend==="stable").length;
-                const total   = prices.length || 1;
+                const total   = prices.length || 1; // eslint-disable-line no-unused-vars
                 const topRising = [...prices].filter(p=>p.trend==="up").sort((a,b)=>b.change-a.change).slice(0,4);
                 return (
                   <div style={{ background:"rgba(255,255,255,.03)", border:"1px solid rgba(255,255,255,.07)", borderRadius:14, padding:20 }}>
@@ -1190,7 +1190,7 @@ function EstimateCalculator({ prices, suppliers, estState, setEstState, estProje
   const fmtN = (n) => `₦${Number(n).toLocaleString("en-NG")}`;
 
   // Get prices filtered to the selected state, else fall back to all
-  const stateOptions = [...new Set(prices.map(p=>p.state))].sort();
+  const stateOptions = [...new Set(prices.map(p=>p.state))].sort(); // eslint-disable-line no-unused-vars
   const pricesInState = prices.filter(p => p.state === estState);
   const fallbackPrices = prices; // used when no state match
 
