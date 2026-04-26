@@ -1,4 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// 250025002500 SUPABASE CLIENT 2500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500250025002500
+const SUPABASE_URL = "https://uicwxbwrerhugrvldjil.supabase.co";
+const SUPABASE_KEY = "sb_publishable_G6WZenHqdN8LwikBjyONhw_kug_CqiG";
+const supabase     = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -224,34 +230,53 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Storage init ──
-  useEffect(() => {
-    (async () => {
-      try {
-        const sp  = await window.storage.get("bpng_prices_v3");
-        const ss  = await window.storage.get("bpng_suppliers_v3");
-        const sq  = await window.storage.get("bpng_pending_v3");
-        const srj = await window.storage.get("bpng_rejected_v3");
-        setPrices(sp?.value    ? JSON.parse(sp.value)    : SEED_PRICES);
-        setSuppliers(ss?.value ? JSON.parse(ss.value)    : SEED_SUPPLIERS);
-        setPending(sq?.value   ? JSON.parse(sq.value)    : SEED_PENDING);
-        setRejected(srj?.value ? JSON.parse(srj.value)   : []);
-        if (!sp?.value)  await window.storage.set("bpng_prices_v3",    JSON.stringify(SEED_PRICES));
-        if (!ss?.value)  await window.storage.set("bpng_suppliers_v3", JSON.stringify(SEED_SUPPLIERS));
-        if (!sq?.value)  await window.storage.set("bpng_pending_v3",   JSON.stringify(SEED_PENDING));
-        if (!srj?.value) await window.storage.set("bpng_rejected_v3",  JSON.stringify([]));
-      } catch {
-        setPrices(SEED_PRICES); setSuppliers(SEED_SUPPLIERS);
-        setPending(SEED_PENDING); setRejected([]);
+  // ── Supabase: load all data ──
+  const loadData = useCallback(async () => {
+    try {
+      const [{ data: pricesData }, { data: suppliersData }, { data: pendingData }, { data: rejectedData }] = await Promise.all([
+        supabase.from("prices").select("*").order("date", { ascending: false }),
+        supabase.from("suppliers").select("*").order("name"),
+        supabase.from("pending").select("*").order("created_at", { ascending: false }),
+        supabase.from("rejected").select("*").order("created_at", { ascending: false }),
+      ]);
+      // Seed if empty
+      if (!pricesData || pricesData.length === 0) {
+        const seedPrices = SEED_PRICES.map(({ id, supplierId, ...rest }) => ({ ...rest, supplier_id: supplierId }));
+        await supabase.from("prices").insert(seedPrices);
+        const { data: fresh } = await supabase.from("prices").select("*").order("date", { ascending: false });
+        setPrices((fresh || []).map(normalizePrice));
+      } else {
+        setPrices((pricesData || []).map(normalizePrice));
       }
-      setLoading(false);
-      setTimeout(() => setAnim(true), 60);
-    })();
+      if (!suppliersData || suppliersData.length === 0) {
+        const seedSups = SEED_SUPPLIERS.map(({ id, ...rest }) => rest);
+        await supabase.from("suppliers").insert(seedSups);
+        const { data: fresh } = await supabase.from("suppliers").select("*").order("name");
+        setSuppliers((fresh || []).map(normalizeSupplier));
+      } else {
+        setSuppliers((suppliersData || []).map(normalizeSupplier));
+      }
+      setPending((pendingData || []).map(normalizePending));
+      setRejected((rejectedData || []).map(normalizeRejected));
+    } catch(e) {
+      console.error("Supabase load error:", e);
+      setPrices(SEED_PRICES); setSuppliers(SEED_SUPPLIERS);
+      setPending(SEED_PENDING); setRejected([]);
+    }
+    setLoading(false);
+    setTimeout(() => setAnim(true), 60);
   }, []);
 
-  const save = async (key, data) => {
-    try { await window.storage.set(key, JSON.stringify(data)); } catch {}
-  };
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // ── Normalise DB rows to app format ──
+  const normalizePrice    = (r) => ({ ...r, supplierId: r.supplier_id, verified: r.verified ?? false });
+  const normalizeSupplier = (r) => ({ ...r, categories: r.categories || [] });
+  const normalizePending  = (r) => ({ ...r, supplierId: r.supplier_id, submittedBy: r.submitted_by, note: r.note || "" });
+  const normalizeRejected = (r) => ({ ...r, rejectedReason: r.rejected_reason, rejectedNote: r.rejected_note });
+
+  // legacy save stub — no longer used for storage, kept for compatibility
+  const save = async () => {};
 
   const supOf = (p) => suppliers.find(s => s.id === p.supplierId);
 
@@ -283,28 +308,35 @@ export default function App() {
   const handleSubmit = async () => {
     if (!form.name||!form.price||!form.state||!form.category) return;
     const entry = {
-      id: Date.now(), ...form,
-      price: parseInt(form.price),
-      supplierId: form.supplierId ? parseInt(form.supplierId) : null,
-      trend:"stable", change:0, verified:false,
-      date: today(), status:"pending",
+      name: form.name, category: form.category, unit: form.unit,
+      price: parseInt(form.price), state: form.state,
+      supplier_id: form.supplierId ? parseInt(form.supplierId) : null,
+      submitted_by: form.submittedBy, note: form.note,
+      trend:"stable", change:0, verified:false, status:"pending",
     };
-    const u = [entry, ...pending];
-    setPending(u); await save("bpng_pending_v3", u);
-    setSubOk(true);
-    setForm({ name:"", category:"", unit:"", price:"", state:"", supplierId:"", submittedBy:"", note:"" });
-    setTimeout(() => { setSubOk(false); setTab("directory"); }, 2800);
+    const { error } = await supabase.from("pending").insert([entry]);
+    if (!error) {
+      setSubOk(true);
+      setForm({ name:"", category:"", unit:"", price:"", state:"", supplierId:"", submittedBy:"", note:"" });
+      await loadData();
+      setTimeout(() => { setSubOk(false); setTab("directory"); }, 2800);
+    } else {
+      showToast("Submission failed. Please try again.", "error");
+    }
   };
 
   // ── Admin: Approve ──
   const handleApprove = async (item) => {
-    const approved = { ...item, verified:true, status:"approved", date:today() };
-    delete approved.submittedBy; delete approved.note; delete approved.status;
-    const newPrices = [approved, ...prices];
-    const newPending = pending.filter(p => p.id !== item.id);
-    setPrices(newPrices); setPending(newPending);
-    await save("bpng_prices_v3",  newPrices);
-    await save("bpng_pending_v3", newPending);
+    const priceRow = {
+      name: item.name, category: item.category, unit: item.unit,
+      price: item.price, state: item.state,
+      supplier_id: item.supplierId || item.supplier_id || null,
+      trend: item.trend || "stable", change: item.change || 0,
+      verified: true, date: today(),
+    };
+    await supabase.from("prices").insert([priceRow]);
+    await supabase.from("pending").delete().eq("id", item.id);
+    await loadData();
     setSelectedSub(null); setShowRejectForm(false);
     showToast(`"${item.name}" approved and published ✓`);
   };
@@ -312,33 +344,41 @@ export default function App() {
   // ── Admin: Approve with edits ──
   const handleApproveEdit = async () => {
     if (!editSub) return;
-    const approved = { ...editSub, verified:true, status:"approved", date:today(), price:parseInt(editSub.price) };
-    delete approved.submittedBy; delete approved.note; delete approved.status;
-    const newPrices = [approved, ...prices];
-    const newPending = pending.filter(p => p.id !== editSub.id);
-    setPrices(newPrices); setPending(newPending);
-    await save("bpng_prices_v3",  newPrices);
-    await save("bpng_pending_v3", newPending);
+    const priceRow = {
+      name: editSub.name, category: editSub.category, unit: editSub.unit,
+      price: parseInt(editSub.price), state: editSub.state,
+      supplier_id: editSub.supplierId || editSub.supplier_id || null,
+      trend: editSub.trend || "stable", change: editSub.change || 0,
+      verified: true, date: today(),
+    };
+    await supabase.from("prices").insert([priceRow]);
+    await supabase.from("pending").delete().eq("id", editSub.id);
+    await loadData();
     setEditSub(null); setSelectedSub(null);
-    showToast(`"${approved.name}" edited & published ✓`);
+    showToast(`"${editSub.name}" edited & published ✓`);
   };
 
   // ── Admin: Reject ──
   const handleReject = async (item) => {
-    const rej = { ...item, status:"rejected", rejectedAt:today(), rejectedReason:rejectReason, rejectedNote:rejectNote };
-    const newPending  = pending.filter(p => p.id !== item.id);
-    const newRejected = [rej, ...rejected];
-    setPending(newPending); setRejected(newRejected);
-    await save("bpng_pending_v3",  newPending);
-    await save("bpng_rejected_v3", newRejected);
+    const rejRow = {
+      name: item.name, category: item.category, unit: item.unit,
+      price: item.price, state: item.state, date: item.date,
+      submitted_by: item.submittedBy || item.submitted_by,
+      note: item.note,
+      rejected_reason: rejectReason,
+      rejected_note: rejectNote,
+    };
+    await supabase.from("rejected").insert([rejRow]);
+    await supabase.from("pending").delete().eq("id", item.id);
+    await loadData();
     setSelectedSub(null); setShowRejectForm(false); setRejectNote("");
-    showToast(`Submission rejected`, "error");
+    showToast("Submission rejected", "error");
   };
 
   // ── Admin: Delete from live prices ──
   const handleDeletePrice = async (id) => {
-    const u = prices.filter(p=>p.id!==id);
-    setPrices(u); await save("bpng_prices_v3", u);
+    await supabase.from("prices").delete().eq("id", id);
+    await loadData();
     showToast("Price removed from directory", "info");
   };
 
@@ -935,9 +975,8 @@ export default function App() {
                       </div>
                       <button
                         onClick={async ()=>{
-                          const updated = suppliers.map(s=>s.id===sup.id?{...s,verified:!s.verified}:s);
-                          setSuppliers(updated);
-                          try { await window.storage.set("bpng_suppliers_v3", JSON.stringify(updated)); } catch {}
+                          await supabase.from("suppliers").update({ verified: !sup.verified }).eq("id", sup.id);
+                          await loadData();
                           showToast(`${sup.name} ${!sup.verified?"verified":"unverified"}`);
                         }}
                         style={{ padding:"5px 12px", borderRadius:7, border:`1px solid ${sup.verified?"rgba(34,197,94,.3)":"rgba(148,163,184,.2)"}`, background:sup.verified?"rgba(34,197,94,.1)":"rgba(255,255,255,.04)", color:sup.verified?"#22c55e":"#64748b", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
@@ -974,10 +1013,9 @@ export default function App() {
                 <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                   <button
                     onClick={async ()=>{
-                      const updated = prices.map(p=>({...p, verified:true}));
-                      setPrices(updated);
-                      try { await window.storage.set("bpng_prices_v3", JSON.stringify(updated)); } catch {}
-                      showToast(`All ${updated.length} prices marked as verified ✓`);
+                      await supabase.from("prices").update({ verified: true }).neq("id", 0);
+                      await loadData();
+                      showToast(`All prices marked as verified ✓`);
                     }}
                     style={{ padding:"9px 14px", borderRadius:8, border:"1px solid rgba(34,197,94,.25)", background:"rgba(34,197,94,.06)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}>
                     ✓ Mark All Prices as Verified
@@ -985,8 +1023,8 @@ export default function App() {
                   <button
                     onClick={async ()=>{
                       if(window.confirm("Clear all rejected submissions? This cannot be undone.")) {
-                        setRejected([]);
-                        try { await window.storage.set("bpng_rejected_v3", JSON.stringify([])); } catch {}
+                        await supabase.from("rejected").delete().neq("id", 0);
+                        await loadData();
                         showToast("Rejected queue cleared", "info");
                       }
                     }}
@@ -996,13 +1034,15 @@ export default function App() {
                   <button
                     onClick={async ()=>{
                       if(window.confirm("Reset the entire database to seed data? All submitted prices will be lost.")) {
-                        setPrices(SEED_PRICES); setSuppliers(SEED_SUPPLIERS); setPending(SEED_PENDING); setRejected([]);
-                        try {
-                          await window.storage.set("bpng_prices_v3",    JSON.stringify(SEED_PRICES));
-                          await window.storage.set("bpng_suppliers_v3", JSON.stringify(SEED_SUPPLIERS));
-                          await window.storage.set("bpng_pending_v3",   JSON.stringify(SEED_PENDING));
-                          await window.storage.set("bpng_rejected_v3",  JSON.stringify([]));
-                        } catch {}
+                        await supabase.from("prices").delete().neq("id", 0);
+                        await supabase.from("suppliers").delete().neq("id", 0);
+                        await supabase.from("pending").delete().neq("id", 0);
+                        await supabase.from("rejected").delete().neq("id", 0);
+                        const seedPrices = SEED_PRICES.map(({ id, supplierId, ...r }) => ({ ...r, supplier_id: supplierId }));
+                        const seedSups   = SEED_SUPPLIERS.map(({ id, ...r }) => r);
+                        await supabase.from("suppliers").insert(seedSups);
+                        await supabase.from("prices").insert(seedPrices);
+                        await loadData();
                         showToast("Database reset to seed data", "info");
                       }
                     }}
@@ -1035,9 +1075,8 @@ export default function App() {
                         {/* Verify toggle */}
                         <button
                           onClick={async ()=>{
-                            const updated = prices.map(p=>p.id===item.id?{...p,verified:!p.verified}:p);
-                            setPrices(updated);
-                            try { await window.storage.set("bpng_prices_v3", JSON.stringify(updated)); } catch {}
+                            await supabase.from("prices").update({ verified: !item.verified }).eq("id", item.id);
+                            await loadData();
                             showToast(`Price ${!item.verified?"verified":"unverified"}`, !item.verified?"success":"info");
                           }}
                           style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${item.verified?"rgba(14,165,233,.3)":"rgba(148,163,184,.2)"}`, background:item.verified?"rgba(14,165,233,.1)":"rgba(255,255,255,.04)", color:item.verified?"#0ea5e9":"#64748b", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
