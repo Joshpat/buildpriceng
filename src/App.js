@@ -276,6 +276,7 @@ export default function App() {
   const normalizeRejected = (r) => ({ ...r, rejectedReason: r.rejected_reason, rejectedNote: r.rejected_note });
 
   // legacy save stub — no longer used for storage, kept for compatibility
+  // eslint-disable-next-line no-unused-vars
   const save = async () => {};
 
   const supOf = (p) => suppliers.find(s => s.id === p.supplierId);
