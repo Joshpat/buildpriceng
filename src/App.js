@@ -145,7 +145,7 @@ function Toast({ msg, type="success" }) {
 
 // ─── STYLE TOKENS ─────────────────────────────────────────────────────────────
 
-const inp = { width:"100%", padding:"10px 14px", borderRadius:8, border:"1px solid rgba(255,255,255,.1)", background:"rgba(255,255,255,.05)", color:"#f1f5f9", fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+const inp = { width:"100%", padding:"10px 14px", borderRadius:8, border:"1px solid rgba(255,255,255,.1)", background:"#1e293b", color:"#f1f5f9", fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
 const lbl = { fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:1.2, marginBottom:6, display:"block" };
 const cardBase = { background:"rgba(255,255,255,.03)", border:"1px solid rgba(255,255,255,.07)", borderRadius:14, padding:22, transition:"all 0.2s" };
 
@@ -1278,7 +1278,7 @@ function EstimateCalculator({ prices, suppliers, estState, setEstState, estProje
   });
   const breakdownEntries = Object.entries(breakdown).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
 
-  const inp2 = { padding:"8px 11px", borderRadius:7, border:"1px solid rgba(255,255,255,.1)", background:"rgba(255,255,255,.05)", color:"#f1f5f9", fontSize:13, outline:"none", fontFamily:"inherit", width:"100%", boxSizing:"border-box" };
+  const inp2 = { padding:"8px 11px", borderRadius:7, border:"1px solid rgba(255,255,255,.1)", background:"#1e293b", color:"#f1f5f9", fontSize:13, outline:"none", fontFamily:"inherit", width:"100%", boxSizing:"border-box" };
   const lbl2 = { fontSize:10, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:1, marginBottom:5, display:"block" };
 
   if (showEstResult) {
