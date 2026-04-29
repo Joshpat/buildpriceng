@@ -209,6 +209,9 @@ export default function App() {
   const [pModal, setPModal] = useState(null);
   const [sModal, setSModal] = useState(null);
 
+  // Edit live price
+  const [editLivePrice, setEditLivePrice] = useState(null);
+
   // Submit form
   const [form,        setForm]        = useState({ name:"", category:"", unit:"", price:"", state:"", supplierId:"", submittedBy:"", note:"" });
   const [subOk,       setSubOk]       = useState(false);
@@ -381,6 +384,23 @@ export default function App() {
     await supabase.from("prices").delete().eq("id", id);
     await loadData();
     showToast("Price removed from directory", "info");
+  };
+
+  // ── Admin: Update live price ──
+  const handleUpdatePrice = async () => {
+    if (!editLivePrice) return;
+    const { id, name, category, unit, price, state, trend, change, verified, supplier_id } = editLivePrice;
+    await supabase.from("prices").update({
+      name, category, unit,
+      price: parseFloat(price),
+      state, trend,
+      change: parseFloat(change) || 0,
+      verified,
+      supplier_id: supplier_id || null,
+    }).eq("id", id);
+    await loadData();
+    setEditLivePrice(null);
+    showToast("Price updated successfully ✓");
   };
 
   // ── PIN auth ──
@@ -1065,26 +1085,78 @@ export default function App() {
               <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
                 {prices.slice(0,30).map(item=>{
                   const sup=supOf(item);
+                  const isEditing = editLivePrice?.id === item.id;
                   return (
-                    <div key={item.id} style={{ ...cardBase, padding:"11px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <span style={{ fontWeight:600, fontSize:14 }}>{item.name}</span>
-                        <span style={{ fontSize:12, color:"#64748b", marginLeft:10 }}>{fmtN(item.price)} / {item.unit||"—"} · {item.state}</span>
-                        {sup && <span style={{ fontSize:11, color:"#0ea5e9", marginLeft:8 }}>🏪 {sup.name}</span>}
-                      </div>
-                      <div style={{ display:"flex", gap:7, alignItems:"center", flexShrink:0 }}>
-                        {/* Verify toggle */}
-                        <button
-                          onClick={async ()=>{
-                            await supabase.from("prices").update({ verified: !item.verified }).eq("id", item.id);
-                            await loadData();
-                            showToast(`Price ${!item.verified?"verified":"unverified"}`, !item.verified?"success":"info");
-                          }}
-                          style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${item.verified?"rgba(14,165,233,.3)":"rgba(148,163,184,.2)"}`, background:item.verified?"rgba(14,165,233,.1)":"rgba(255,255,255,.04)", color:item.verified?"#0ea5e9":"#64748b", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                          {item.verified?"✓ Verified":"Unverified"}
-                        </button>
-                        <Btn small danger outline onClick={()=>handleDeletePrice(item.id)}>Remove</Btn>
-                      </div>
+                    <div key={item.id} style={{ ...cardBase, padding:"11px 16px" }}>
+                      {/* Normal row */}
+                      {!isEditing && (
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <span style={{ fontWeight:600, fontSize:14 }}>{item.name}</span>
+                            <span style={{ fontSize:12, color:"#64748b", marginLeft:10 }}>{fmtN(item.price)} / {item.unit||"—"} · {item.state}</span>
+                            {sup && <span style={{ fontSize:11, color:"#0ea5e9", marginLeft:8 }}>🏪 {sup.name}</span>}
+                          </div>
+                          <div style={{ display:"flex", gap:7, alignItems:"center", flexShrink:0 }}>
+                            {/* Verify toggle */}
+                            <button
+                              onClick={async ()=>{
+                                await supabase.from("prices").update({ verified: !item.verified }).eq("id", item.id);
+                                await loadData();
+                                showToast(`Price ${!item.verified?"verified":"unverified"}`, !item.verified?"success":"info");
+                              }}
+                              style={{ padding:"4px 10px", borderRadius:7, border:`1px solid ${item.verified?"rgba(14,165,233,.3)":"rgba(148,163,184,.2)"}`, background:item.verified?"rgba(14,165,233,.1)":"rgba(255,255,255,.04)", color:item.verified?"#0ea5e9":"#64748b", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                              {item.verified?"✓ Verified":"Unverified"}
+                            </button>
+                            <Btn small outline color="#f59e0b" onClick={()=>setEditLivePrice({...item})}>✏ Edit</Btn>
+                            <Btn small danger outline onClick={()=>handleDeletePrice(item.id)}>Remove</Btn>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Inline edit form */}
+                      {isEditing && (
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:700, color:"#f59e0b", textTransform:"uppercase", letterSpacing:.8, marginBottom:12 }}>Editing Price</div>
+                          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:10 }}>
+                            <div>
+                              <label style={{ fontSize:10, color:"#64748b", fontWeight:700, textTransform:"uppercase", letterSpacing:.8, marginBottom:4, display:"block" }}>Material Name</label>
+                              <input value={editLivePrice.name} onChange={e=>setEditLivePrice(p=>({...p,name:e.target.value}))} style={{...inp, fontSize:12}}/>
+                            </div>
+                            <div>
+                              <label style={{ fontSize:10, color:"#64748b", fontWeight:700, textTransform:"uppercase", letterSpacing:.8, marginBottom:4, display:"block" }}>Price (₦)</label>
+                              <input type="number" value={editLivePrice.price} onChange={e=>setEditLivePrice(p=>({...p,price:e.target.value}))} style={{...inp, fontSize:12}}/>
+                            </div>
+                            <div>
+                              <label style={{ fontSize:10, color:"#64748b", fontWeight:700, textTransform:"uppercase", letterSpacing:.8, marginBottom:4, display:"block" }}>Unit</label>
+                              <input value={editLivePrice.unit||""} onChange={e=>setEditLivePrice(p=>({...p,unit:e.target.value}))} style={{...inp, fontSize:12}}/>
+                            </div>
+                            <div>
+                              <label style={{ fontSize:10, color:"#64748b", fontWeight:700, textTransform:"uppercase", letterSpacing:.8, marginBottom:4, display:"block" }}>Category</label>
+                              <select value={editLivePrice.category} onChange={e=>setEditLivePrice(p=>({...p,category:e.target.value}))} style={{...inp, fontSize:12}}>
+                                {CATEGORIES.slice(1).map(c=><option key={c}>{c}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize:10, color:"#64748b", fontWeight:700, textTransform:"uppercase", letterSpacing:.8, marginBottom:4, display:"block" }}>State</label>
+                              <select value={editLivePrice.state} onChange={e=>setEditLivePrice(p=>({...p,state:e.target.value}))} style={{...inp, fontSize:12}}>
+                                {STATES.slice(1).map(s=><option key={s}>{s}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label style={{ fontSize:10, color:"#64748b", fontWeight:700, textTransform:"uppercase", letterSpacing:.8, marginBottom:4, display:"block" }}>Trend</label>
+                              <select value={editLivePrice.trend||"stable"} onChange={e=>setEditLivePrice(p=>({...p,trend:e.target.value}))} style={{...inp, fontSize:12}}>
+                                <option value="stable">Stable</option>
+                                <option value="up">Up</option>
+                                <option value="down">Down</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div style={{ display:"flex", gap:8 }}>
+                            <Btn small color="#22c55e" onClick={handleUpdatePrice}>✓ Save Changes</Btn>
+                            <Btn small outline color="#64748b" onClick={()=>setEditLivePrice(null)}>Cancel</Btn>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
