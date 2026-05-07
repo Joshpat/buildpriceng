@@ -168,7 +168,7 @@ function Btn({ children, onClick, color="#0ea5e9", small=false, outline=false, d
 }
 
 // ─── ADMIN PIN ────────────────────────────────────────────────────────────────
-const ADMIN_PIN = "1234"; // demo PIN — changeable
+const ADMIN_PIN = process.env.REACT_APP_ADMIN_PIN || "003344";
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
