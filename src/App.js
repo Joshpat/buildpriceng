@@ -1277,7 +1277,7 @@ export default function App() {
               style={{ ...inp, textAlign:"center", fontSize:22, letterSpacing:8, maxWidth:200, margin:"0 auto 4px" }}
             />
             {pinError && <div style={{ color:"#ef4444", fontSize:12, marginBottom:10 }}>Incorrect PIN. Try again.</div>}
-            <div style={{ fontSize:11, color:"#475569", marginBottom:18 }}>Demo PIN: <strong style={{ color:"#f59e0b" }}>1234</strong></div>
+            
             <Btn onClick={tryPin}>Enter Admin Panel →</Btn>
           </div>
         </Modal>
